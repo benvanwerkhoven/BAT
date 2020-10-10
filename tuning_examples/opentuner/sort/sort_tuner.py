@@ -7,7 +7,6 @@ from opentuner import EnumParameter
 from opentuner.search.manipulator import BooleanParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
-from numba import cuda
 import math
 import json
 
@@ -22,8 +21,7 @@ class SortTuner(MeasurementInterface):
         ConfigurationManipulator
         """
 
-        gpu = cuda.get_current_device()
-        max_size = gpu.MAX_THREADS_PER_BLOCK
+        max_size = 1024
         # Using 2^i values less than `gpu.MAX_THREADS_PER_BLOCK` and over 16
         block_sizes = list(filter(lambda x: x <= max_size, [2**i for i in range(4, 11)]))
 
@@ -49,7 +47,7 @@ class SortTuner(MeasurementInterface):
         args = argparser.parse_args()
 
         cfg = desired_result.configuration.data
-        compute_capability = cuda.get_current_device().compute_capability
+        compute_capability = (7, 0)
         cc = str(compute_capability[0]) + str(compute_capability[1])
 
         # Check constraint for block sizes and data sizes
@@ -60,8 +58,7 @@ class SortTuner(MeasurementInterface):
         # 4 is the size of uints and 2 is because shared memory is used for both keys and values in the "reorderData" function
         # 16 * 2 is also added due to two other shared memory uint arrays used for offsets
         shared_memory_needed = (cfg['SCAN_BLOCK_SIZE'] * cfg['SCAN_DATA_SIZE'] * 4 * 2) + (4 * 16 * 2)
-        gpu = cuda.get_current_device()
-        available_shared_memory = gpu.MAX_SHARED_MEMORY_PER_BLOCK
+        available_shared_memory = 49152
 
         if shared_memory_needed > available_shared_memory:
             return Result(time=float("inf"), state="ERROR", accuracy=float("-inf"))
@@ -98,7 +95,7 @@ class SortTuner(MeasurementInterface):
         program_command = './sort -s ' + str(args.size)
         if args.parallel:
             # Select number below max connected GPUs
-            chosen_gpu_number = min(args.gpu_num, len(cuda.gpus))
+            chosen_gpu_number = min(args.gpu_num, 4)
       
             devices = ','.join([str(i) for i in range(0, chosen_gpu_number)])
             run_cmd = f'mpirun -np {chosen_gpu_number} --allow-run-as-root {program_command} -d {devices}'

@@ -7,7 +7,6 @@ from opentuner import EnumParameter
 from opentuner.search.manipulator import BooleanParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
-from numba import cuda
 import math
 import json
 
@@ -22,12 +21,11 @@ class ReductionTuner(MeasurementInterface):
         ConfigurationManipulator
         """
         args = argparser.parse_args()
-        max_gpus = len(cuda.gpus)
+        max_gpus = 4
         if args.parallel == 0:
             max_gpus = 1
 
-        gpu = cuda.get_current_device()
-        max_block_size = gpu.MAX_THREADS_PER_BLOCK
+        max_block_size = 1024
         # Using 2^i values less than `gpu.MAX_THREADS_PER_BLOCK` except 32
         block_sizes = list(filter(lambda x: x <= max_block_size, [1, 2, 4, 8, 16, 64, 128, 256, 512, 1024]))
 
@@ -54,7 +52,7 @@ class ReductionTuner(MeasurementInterface):
         args = argparser.parse_args()
 
         cfg = desired_result.configuration.data
-        compute_capability = cuda.get_current_device().compute_capability
+        compute_capability = (7, 0)
         cc = str(compute_capability[0]) + str(compute_capability[1])
 
         use_fast_math = ''
@@ -105,7 +103,7 @@ class ReductionTuner(MeasurementInterface):
             run_cmd = program_command
         else:
             # Select number in the range of 1 to max connected GPUs
-            chosen_gpu_number = max(min(args.gpu_num if args.gpu_num is not None else cfg['GPUS'], len(cuda.gpus)), 1)
+            chosen_gpu_number = max(min(args.gpu_num if args.gpu_num is not None else cfg['GPUS'], 4), 1)
 
             devices = ','.join([str(i) for i in range(0, chosen_gpu_number)])
             run_cmd = f'mpirun -np {chosen_gpu_number} --allow-run-as-root {program_command} -d {devices}'

@@ -7,7 +7,6 @@ from opentuner import EnumParameter
 from opentuner.search.manipulator import BooleanParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
-from numba import cuda
 import math
 import json
 
@@ -22,9 +21,8 @@ class SPMVTuner(MeasurementInterface):
         ConfigurationManipulator
         """
 
-        gpu = cuda.get_current_device()
         min_size = 1
-        max_size = gpu.MAX_THREADS_PER_BLOCK
+        max_size = 1024
 
         manipulator = ConfigurationManipulator()
         manipulator.add_parameter(IntegerParameter('BLOCK_SIZE', min_size, max_size))
@@ -45,7 +43,7 @@ class SPMVTuner(MeasurementInterface):
         args = argparser.parse_args()
 
         cfg = desired_result.configuration.data
-        compute_capability = cuda.get_current_device().compute_capability
+        compute_capability = (7, 0)
         cc = str(compute_capability[0]) + str(compute_capability[1])
 
         # Check constraints for the parameters
@@ -81,7 +79,7 @@ class SPMVTuner(MeasurementInterface):
         program_command = './spmv -s ' + str(args.size)
         if args.parallel:
             # Select number below max connected GPUs
-            chosen_gpu_number = min(args.gpu_num, len(cuda.gpus))
+            chosen_gpu_number = min(args.gpu_num, 4)
       
             devices = ','.join([str(i) for i in range(0, chosen_gpu_number)])
             run_cmd = f'mpirun -np {chosen_gpu_number} --allow-run-as-root {program_command} -d {devices}'

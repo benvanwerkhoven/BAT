@@ -7,7 +7,6 @@ from opentuner import EnumParameter
 from opentuner.search.manipulator import BooleanParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
-from numba import cuda
 import math
 import json
 
@@ -23,7 +22,7 @@ class Stencil2DTuner(MeasurementInterface):
         """
 
         manipulator = ConfigurationManipulator()
-        manipulator.add_parameter(IntegerParameter('GPUS', 1, len(cuda.gpus)))
+        manipulator.add_parameter(IntegerParameter('GPUS', 1, 4))
 
         return manipulator
 
@@ -35,7 +34,7 @@ class Stencil2DTuner(MeasurementInterface):
         args = argparser.parse_args()
 
         cfg = desired_result.configuration.data
-        compute_capability = cuda.get_current_device().compute_capability
+        compute_capability = (7, 0)
         cc = str(compute_capability[0]) + str(compute_capability[1])
 
         make_program = f'nvcc -gencode=arch=compute_{cc},code=sm_{cc} -I {start_path}/cuda-common -I {start_path}/common -g -O2 -c {start_path}/stencil2d/CUDAStencilKernel.cu \n'

@@ -7,7 +7,6 @@ from opentuner import EnumParameter
 from opentuner.search.manipulator import BooleanParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
-from numba import cuda
 import math
 import json
 
@@ -22,8 +21,7 @@ class TriadTuner(MeasurementInterface):
         ConfigurationManipulator
         """
 
-        gpu = cuda.get_current_device()        
-        max_block_size = gpu.MAX_THREADS_PER_BLOCK
+        max_block_size = 1024
         
         manipulator = ConfigurationManipulator()
         # Using block size less than `gpu.MAX_THREADS_PER_BLOCK`
@@ -42,7 +40,7 @@ class TriadTuner(MeasurementInterface):
         args = argparser.parse_args()
 
         cfg = desired_result.configuration.data
-        compute_capability = cuda.get_current_device().compute_capability
+        compute_capability = (7, 0)
         cc = str(compute_capability[0]) + str(compute_capability[1])
 
         make_program = f'nvcc -gencode=arch=compute_{cc},code=sm_{cc} -I {start_path}/cuda-common -I {start_path}/common -g -O2 -c {start_path}/triad/triad.cu'
@@ -69,7 +67,7 @@ class TriadTuner(MeasurementInterface):
         program_command = './triad'
         if args.parallel:
             # Select number below max connected GPUs
-            chosen_gpu_number = min(args.gpu_num, len(cuda.gpus))
+            chosen_gpu_number = min(args.gpu_num, 4)
       
             devices = ','.join([str(i) for i in range(0, chosen_gpu_number)])
             run_cmd = f'mpirun -np {chosen_gpu_number} --allow-run-as-root {program_command} -d {devices}'

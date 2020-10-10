@@ -7,7 +7,6 @@ from opentuner import EnumParameter
 from opentuner.search.manipulator import BooleanParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
-from numba import cuda
 import math
 import json
 
@@ -23,7 +22,7 @@ class ScanTuner(MeasurementInterface):
         """
 
         args = argparser.parse_args()
-        max_gpus = len(cuda.gpus)
+        max_gpus = 4
         if args.parallel == 0:
             max_gpus = 1
 
@@ -58,7 +57,7 @@ class ScanTuner(MeasurementInterface):
         if cfg['GRID_SIZE'] > cfg['BLOCK_SIZE']:
             return Result(time=float("inf"), state="ERROR", accuracy=float("-inf"))
 
-        compute_capability = cuda.get_current_device().compute_capability
+        compute_capability = (7, 0)
         cc = str(compute_capability[0]) + str(compute_capability[1])
         use_fast_math = ''
         if cfg['USE_FAST_MATH']:

@@ -7,7 +7,6 @@ from opentuner import EnumParameter
 from opentuner.search.manipulator import BooleanParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
-from numba import cuda
 import math
 import json
 
@@ -22,9 +21,8 @@ class MD5HashTuner(MeasurementInterface):
         ConfigurationManipulator
         """
 
-        gpu = cuda.get_current_device()
         manipulator = ConfigurationManipulator()
-        manipulator.add_parameter(IntegerParameter('BLOCK_SIZE', 1, gpu.MAX_THREADS_PER_BLOCK))
+        manipulator.add_parameter(IntegerParameter('BLOCK_SIZE', 1, 1024))
         manipulator.add_parameter(IntegerParameter('ROUND_STYLE', 0, 1))
         manipulator.add_parameter(IntegerParameter('UNROLL_LOOP_1', 0, 1))
         manipulator.add_parameter(IntegerParameter('UNROLL_LOOP_2', 0, 1))
@@ -43,7 +41,7 @@ class MD5HashTuner(MeasurementInterface):
         args = argparser.parse_args()
 
         cfg = desired_result.configuration.data
-        compute_capability = cuda.get_current_device().compute_capability
+        compute_capability = (7, 0)
         cc = str(compute_capability[0]) + str(compute_capability[1])
 
         make_program = f'nvcc -gencode=arch=compute_{cc},code=sm_{cc} -I {start_path}/cuda-common -I {start_path}/common -g -O2 -c {start_path}/md5hash/md5hash.cu'
@@ -71,7 +69,7 @@ class MD5HashTuner(MeasurementInterface):
         program_command = './md5hash -s ' + str(args.size)
         if args.parallel:
             # Select number below max connected GPUs
-            chosen_gpu_number = min(args.gpu_num, len(cuda.gpus))
+            chosen_gpu_number = min(args.gpu_num, 4)
       
             devices = ','.join([str(i) for i in range(0, chosen_gpu_number)])
             run_cmd = f'mpirun -np {chosen_gpu_number} --allow-run-as-root {program_command} -d {devices}'
