@@ -23,7 +23,7 @@ class MinTuner:
                 params.append(v_list)
             if v.get('value_range', None):
                 v_range = list(range(int(v['value_range']['start']),
-                                     int(v['value_range']['end']) + int(v['value_range']['inclusive'] == 'True'),
+                                     int(v['value_range']['end']) + int(v['value_range']['inclusive'] == True),
                                      int(v['value_range']['stride'])))
                 params.append(v_range)
         return list(product(*params))
