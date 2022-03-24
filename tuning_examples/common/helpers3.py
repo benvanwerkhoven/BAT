@@ -63,9 +63,9 @@ def call_program(cmd):
     return result
 
 
-def run_cmd_builder(search_settings, launch_args, benchmark_name):
+def run_cmd_builder(search_settings, launch_args, benchmark_name, gpu):
     # args = search_settings['parallelization']
-    program_command = f'./{benchmark_name} -s ' + str(launch_args['size'])
+    program_command = f'CUDA_VISIBLE_DEVICES={gpu} ./{benchmark_name}-{gpu} -s ' + str(launch_args['size'])
     if launch_args['parallel']:
         # Select number below max connected GPUs
         chosen_gpu_number = min(launch_args['gpunum'], len(cuda.gpus))

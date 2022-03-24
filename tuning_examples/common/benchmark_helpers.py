@@ -11,23 +11,24 @@ from tuning_examples.common.programs.stencil2d.helper_stencil2d import create_co
 from tuning_examples.common.programs.triad.helper_triad import create_config_definition_triad
 
 
-def compile_benchmark(meta, cfg):
+def compile_benchmark(meta, cfg, gpu):
     parallel = False
+    benchmark_name = meta['benchmark_suite']['benchmark_name']
     compile_cmd = f'make -j8 {"parallel" if parallel else "default"} PARAMETERS="'
     # print(cfg)
     for param in cfg:
         compile_cmd += f' -D{param["name"]}={param["value"]}'
-    compile_cmd += '" \n'
+    compile_cmd += f'" BIN_NAME="{benchmark_name}-{gpu}"\n'
 
     return call_program(compile_cmd)
 
 
-def run_benchmark(meta):
+def run_benchmark(meta, gpu):
     benchmark_name = meta['benchmark_suite']['benchmark_name']
     return call_program(run_cmd_builder(
         meta['search_settings'],
         meta['benchmark_suite']['args'],
-        benchmark_name))
+        benchmark_name, gpu))
 
 
 def_dict = {

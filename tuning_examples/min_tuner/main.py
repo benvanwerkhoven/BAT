@@ -1,6 +1,8 @@
 import json
 from itertools import product
 from random import randint
+import multiprocessing as mp
+import os
 
 from tuning_examples.common.benchmark_helpers import compile_benchmark, run_benchmark
 from tuning_examples.common.helpers2 import result_builder
@@ -57,15 +59,43 @@ class MinTuner:
     def run(self):
         all_results = []
         meta = self.oadc['metadata']
-        r = range(meta['search_settings']['budget']['steps'])
+        percent = 0.01
+        print("hello")
+        r = range(int(float(meta['search_settings']['budget']['steps']) * percent))
+        print(r)
         prog = Progressbar(len(r))
         prog.algorithm(meta['benchmark_suite']['benchmark_name'])
+
+        n_gpus = 1
+        p_gpus = []
+        q_list = []
+
+        for gpu in range(n_gpus):
+            q_list.append(mp.Queue())
+            p_gpus.append(mp.Process(target=self.inner_loop, args=(meta, all_results, gpu,
+                                                                   range(gpu, len(r), n_gpus), prog, q_list[gpu])))
+            p_gpus[gpu].start()
+        for gpu in range(n_gpus):
+            p_gpus[gpu].join()
+            all_results.append(q_list[gpu].get())
+
+        self.inner_loop(meta, all_results, 0, range(len(r) - (len(r) % n_gpus), len(r)), prog, None)
+        return all_results
+
+    def inner_loop(self, meta, all_results, gpu, r, prog, q):
+        print('module name:', __name__)
+        print('parent process:', os.getppid())
+        print('process id:', os.getpid())
+        print("Worker: ", gpu)
+        local_results = []
         for i in r:
             cfg = self.pick_config(meta['configuration_space'], meta['search_settings'], i)
-            compile_result = compile_benchmark(meta, cfg)
-            run_result = run_benchmark(meta)
+            compile_result = compile_benchmark(meta, cfg, gpu)
+            run_result = run_benchmark(meta, gpu)
             result = result_builder(compile_result, run_result, cfg)
-            all_results.append(result)
+            local_results.append(result)
             prog.update_progress(i)
-
-        return all_results
+        if q is not None:
+            q.put(local_results)
+        else:
+            all_results.extend(local_results)

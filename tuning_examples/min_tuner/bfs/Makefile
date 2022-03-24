@@ -7,7 +7,7 @@ default: dependencies
 	nvcc -I $(START_PATH)/common/ -I $(START_PATH)/cuda-common/ -g -O2 -c -o main.o $(START_PATH)/cuda-common/main.cpp
 	nvcc -gencode=arch=compute_52,code=sm_52 -I $(START_PATH)/cuda-common -I $(START_PATH)/common -g -O2 -c $(START_PATH)/bfs/BFS.cu $(PARAMETERS)
 	nvcc -gencode=arch=compute_52,code=sm_52 -I $(START_PATH)/cuda-common -I $(START_PATH)/common -g -O2 -c $(START_PATH)/bfs/bfs_kernel.cu $(PARAMETERS)
-	nvcc -L $(START_PATH)/cuda-common -L $(START_PATH)/common -o bfs Graph.o main.o BFS.o -lSHOCCommon
+	nvcc -L $(START_PATH)/cuda-common -L $(START_PATH)/common -o ${BIN_NAME} Graph.o main.o BFS.o -lSHOCCommon
 	echo "\033[92m[✓]\033[0m Done compiling program! 🎉"
 
 parallel: dependencies
@@ -16,7 +16,7 @@ parallel: dependencies
 	mpicxx -I $(START_PATH)/common/ -I $(START_PATH)/cuda-common/ -I /usr/local/cuda/include -DPARALLEL  -I $(START_PATH)/mpi-common/ -g -O2 -c -o main.o $(START_PATH)/cuda-common/main.cpp
 	nvcc -gencode=arch=compute_52,code=sm_52 -I $(START_PATH)/cuda-common -I $(START_PATH)/common -g -O2 -c $(START_PATH)/bfs/BFS.cu $(PARAMETERS)
 	nvcc -gencode=arch=compute_52,code=sm_52 -I $(START_PATH)/cuda-common -I $(START_PATH)/common -g -O2 -c $(START_PATH)/bfs/bfs_kernel.cu $(PARAMETERS)
-	mpicxx -L $(START_PATH)/cuda-common -L $(START_PATH)/common -o bfs Graph.o main.o BFS.o -lSHOCCommon "-L/usr/local/cuda/bin/../targets/x86_64-linux/lib/stubs" "-L/usr/local/cuda/bin/../targets/x86_64-linux/lib" -lcudadevrt -lcudart_static -lrt -lpthread -ldl -lrt -lrt
+	mpicxx -L $(START_PATH)/cuda-common -L $(START_PATH)/common -o ${BIN_NAME} Graph.o main.o BFS.o -lSHOCCommon "-L/usr/local/cuda/bin/../targets/x86_64-linux/lib/stubs" "-L/usr/local/cuda/bin/../targets/x86_64-linux/lib" -lcudadevrt -lcudart_static -lrt -lpthread -ldl -lrt -lrt
 	echo "\033[92m[✓]\033[0m Done compiling parallel program! 🎉"
 
 dependencies:
