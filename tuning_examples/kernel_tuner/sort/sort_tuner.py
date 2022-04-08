@@ -1,51 +1,71 @@
 #!/usr/bin/env python
+import os
 import argparse
 from collections import OrderedDict
 
+import numpy as np
 from kernel_tuner import tune_kernel
-from numba import cuda
 
-from common import store_BAT_results
+from common import store_BAT_results, get_device_info
 
-def tune(size, strategy, test=False):
+dir_path = os.path.dirname(os.path.realpath(__file__))
+
+kernel_file = dir_path + "/../../../src/kernels/sort/sort_kernel_helper.cu"
+data_dir = dir_path + "/../../../src/kernels/sort/data/scan/"
+
+def read_input_data(input_problem_size):
+
+    def read_txt_file(filename):
+        with open(filename, "r") as fh:
+            return np.array([int(i) for i in fh.read().strip().split("\n")]).astype(np.int32)
+
+    block_sums = read_txt_file(f"{data_dir}{input_problem_size}-blockSums")
+    scan_input = read_txt_file(f"{data_dir}{input_problem_size}-scanInput")
+    scan_output = read_txt_file(f"{data_dir}{input_problem_size}-scanOutput")
+
+    return [scan_output, scan_input, block_sums]
+
+
+def tune(input_problem_size, strategy, test=False):
     """ Function to setup tunable parameters and tune the sort benchmark """
 
-    # Use host code in combination with CUDA kernel
-    kernel_files = ['sort_host.cu', '../../../src/kernels/sort/sort_kernel.cu']
+    # Only tune CUDA kernel
+    problem_sizes = [1, 8, 48, 96]
+    size = int((problem_sizes[input_problem_size - 1] * 1024 * 1024) / 4) # 4 = sizeof(uint)
+    problem_size = f"int(16 * ({size} // (SCAN_DATA_SIZE * SCAN_BLOCK_SIZE)))"
 
-    gpu = cuda.get_current_device()
-    max_size = gpu.MAX_THREADS_PER_BLOCK
+    #problem_size = f"int(16 * (({size} // SCAN_DATA_SIZE) // SCAN_BLOCK_SIZE))"
+    #problem_size = int(16 * (size // 2))
+    block_size_names = ["SCAN_BLOCK_SIZE"]
+    grid_div_x = ["SCAN_BLOCK_SIZE", "SORT_DATA_SIZE"]
+    args = read_input_data(input_problem_size) + [np.int32(size), np.int8(0), np.int8(1)]
+
+    gpu = get_device_info(0)
+    max_size = gpu["max_threads"]
     # Using 2^i values less than `gpu.MAX_THREADS_PER_BLOCK` and over 16
-    block_sizes = list(filter(lambda x: x <= max_size, [2**i for i in range(4, 11)]))
+    block_sizes = list(filter(lambda x: x <= max_size, [2**i for i in range(5, 11)]))
 
     # Add parameters to tune
     tune_params = OrderedDict()
-    tune_params["LOOP_UNROLL_LSB"] = [0, 1]
     tune_params["LOOP_UNROLL_LOCAL_MEMORY"] = [0, 1]
     tune_params["SCAN_DATA_SIZE"] = [2, 4, 8]  # vector width of input data
     tune_params["SORT_DATA_SIZE"] = [2, 4, 8]  # number of elements per thread
     tune_params["SCAN_BLOCK_SIZE"] = block_sizes
     tune_params["SORT_BLOCK_SIZE"] = block_sizes
-    tune_params["INLINE_LSB"] = [0, 1]
-    tune_params["INLINE_SCAN"] = [0, 1]
     tune_params["INLINE_LOCAL_MEMORY"] = [0, 1]
 
     if test:
-        tune_params["LOOP_UNROLL_LSB"] = [0]
         tune_params["LOOP_UNROLL_LOCAL_MEMORY"] = [0]
         tune_params["SCAN_DATA_SIZE"] = [2, 4, 8]  # vector width of input data
         tune_params["SORT_DATA_SIZE"] = [2]  # number of elements per thread
-        tune_params["SCAN_BLOCK_SIZE"] = [block_sizes[0]]
-        tune_params["SORT_BLOCK_SIZE"] = [block_sizes[0]]
-        tune_params["INLINE_LSB"] = [0]
-        tune_params["INLINE_SCAN"] = [0]
+        tune_params["SCAN_BLOCK_SIZE"] = [block_sizes[-1]]
+        tune_params["SORT_BLOCK_SIZE"] = [block_sizes[-1]]
         tune_params["INLINE_LOCAL_MEMORY"] = [0]
 
     # Constraint to ensure not attempting to use too much shared memory
     # 4 is the size of uints and 2 is because shared memory is used for both keys and values in the "reorderData" function
     # 16 * 2 is also added due to two other shared memory uint arrays used for offsets
-    gpu = cuda.get_current_device()
-    available_shared_memory = gpu.MAX_SHARED_MEMORY_PER_BLOCK
+    available_shared_memory = gpu["max_shared_memory"]
 
     # Constraint for block sizes and data sizes
     constraint = ["(SCAN_BLOCK_SIZE / SORT_BLOCK_SIZE) == (SORT_DATA_SIZE / SCAN_DATA_SIZE)",
@@ -56,10 +76,11 @@ def tune(size, strategy, test=False):
         strategy_options = {"maxiter": 50, "popsize": 10}
 
     # Tune all kernels and correctness verify by throwing error if verification failed
-    tuning_results = tune_kernel("sort", kernel_files, size, [], tune_params, strategy=strategy,
-                                lang="C", restrictions=constraint,
-                                compiler_options=["-I ../../../src/kernels/sort/", f"-DPROBLEM_SIZE={input_problem_size}"],
-                                iterations=2, strategy_options=strategy_options)
+    tuning_results = tune_kernel("scan_helper", kernel_file, problem_size, args, tune_params, strategy=strategy,
+                                restrictions=constraint,
+                                grid_div_x=grid_div_x, block_size_names=block_size_names,
+                                lang="cupy",
+                                iterations=7, strategy_options=strategy_options)
 
     return tuning_results, tune_params
 
@@ -74,10 +95,8 @@ if __name__ == "__main__":
     arguments = parser.parse_args()
 
     # Problem sizes used in the SHOC benchmark
-    problem_sizes = [1, 8, 48, 96]
     input_problem_size = arguments.size
-    size = int((problem_sizes[input_problem_size - 1] * 1024 * 1024) / 4) # 4 = sizeof(uint)
 
-    tuning_results, tune_params = tune(size, arguments.technique, arguments.test)
+    tuning_results, tune_params = tune(arguments.size, arguments.technique, arguments.test)
 
-    store_BAT_results("sort", tuning_results, input_problem_size, arguments.technique, tune_params)
+    store_BAT_results("sort", tuning_results, arguments.size, arguments.technique, tune_params)
