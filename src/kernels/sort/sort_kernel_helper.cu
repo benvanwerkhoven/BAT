@@ -514,11 +514,7 @@ uint scanLocalMem(const uint val, uint* s_data)
     return s_data[idx-1];
 }
 
-#ifdef kernel_tuner
-__device__ void
-#else
 extern "C" __global__ void
-#endif
 scan(uint *g_odata, uint* g_idata, uint* g_blockSums, const int n, const bool fullBlock, const bool storeSum)
 {
     __shared__ uint s_data[SCAN_DATA_SIZE * SCAN_BLOCK_SIZE];
@@ -672,16 +668,11 @@ scan(uint *g_odata, uint* g_idata, uint* g_blockSums, const int n, const bool fu
 
 extern "C" __global__ void
 scan_helper(uint *g_odata, uint* g_idata, uint* g_blockSums, const int size, const bool fullBlock, const bool storeSum) {
-
-#ifdef kernel_tuner
-    scan(g_odata, g_idata, g_blockSums, 16*grid_size_x, fullBlock, storeSum);
-#else
     const size_t reorderFindGlobalWorkSize = size / 2;
     const size_t reorderBlocks = reorderFindGlobalWorkSize / SCAN_BLOCK_SIZE;
     const int n = 16 * reorderBlocks;
 
     scan(g_odata, g_idata, g_blockSums, n, fullBlock, storeSum);
-#endif
 }
 
 extern "C" __global__ void

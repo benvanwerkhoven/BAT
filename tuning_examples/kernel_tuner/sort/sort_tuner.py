@@ -10,14 +10,17 @@ from common import store_BAT_results, get_device_info
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
-kernel_file = dir_path + "/../../../src/kernels/sort/sort_kernel_helper.cu"
+kernel_file = dir_path + "/../../../src/kernels/sort/sort_kernel.cu"
 data_dir = dir_path + "/../../../src/kernels/sort/data/scan/"
 
-def read_input_data(input_problem_size):
+def read_input_data(input_problem_size, size):
 
     def read_txt_file(filename):
         with open(filename, "r") as fh:
-            return np.array([int(i) for i in fh.read().strip().split("\n")]).astype(np.int32)
+            holder = np.zeros(size, dtype=np.int32)
+            data = np.array([int(i) for i in fh.read().strip().split("\n")]).astype(np.int32)
+            holder[:data.size] = data
+            return holder
 
     block_sums = read_txt_file(f"{data_dir}{input_problem_size}-blockSums")
     scan_input = read_txt_file(f"{data_dir}{input_problem_size}-scanInput")
@@ -32,13 +35,21 @@ def tune(input_problem_size, strategy, test=False):
     # Only tune CUDA kernel
     problem_sizes = [1, 8, 48, 96]
     size = int((problem_sizes[input_problem_size - 1] * 1024 * 1024) / 4) # 4 = sizeof(uint)
-    problem_size = f"int(16 * ({size} // (SCAN_DATA_SIZE * SCAN_BLOCK_SIZE)))"
 
-    #problem_size = f"int(16 * (({size} // SCAN_DATA_SIZE) // SCAN_BLOCK_SIZE))"
-    #problem_size = int(16 * (size // 2))
+    def problem_size_func(p):                                        #matching line no. in programs/sort/sort.cu
+        reorderFindGlobalWorkSize = size // p['SCAN_DATA_SIZE']                              #L217
+        reorderBlocks = reorderFindGlobalWorkSize // p['SCAN_BLOCK_SIZE']                    #L222
+        numElements = 16 * reorderBlocks                                                     #L232
+        numBlocks = int(np.ceil(numElements / (p['SORT_DATA_SIZE'] * p['SCAN_BLOCK_SIZE']))) #L242
+        grid = (numBlocks, 1, 1)                                                             #L248
+        return grid
+
+    problem_size = problem_size_func
+    grid_div_x = []
+
     block_size_names = ["SCAN_BLOCK_SIZE"]
-    grid_div_x = ["SCAN_BLOCK_SIZE", "SORT_DATA_SIZE"]
-    args = read_input_data(input_problem_size) + [np.int32(size), np.int8(0), np.int8(1)]
+
+    args = read_input_data(input_problem_size, size) + [np.int32(size), np.uint8(1), np.uint8(1)]
 
     gpu = get_device_info(0)
     max_size = gpu["max_threads"]
@@ -76,7 +87,7 @@ def tune(input_problem_size, strategy, test=False):
         strategy_options = {"maxiter": 50, "popsize": 10}
 
     # Tune all kernels and correctness verify by throwing error if verification failed
-    tuning_results = tune_kernel("scan_helper", kernel_file, problem_size, args, tune_params, strategy=strategy,
+    tuning_results = tune_kernel("scan", kernel_file, problem_size, args, tune_params, strategy=strategy,
                                 restrictions=constraint,
                                 grid_div_x=grid_div_x, block_size_names=block_size_names,
                                 lang="cupy",
